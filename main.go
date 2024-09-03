@@ -45,17 +45,23 @@ func gstInit() {
 func test() error {
 	var pipeline *gst.Pipeline
 	var err error
-	strPipeline := `rtpsession name=r
-   audiotestsrc
-   ! opusenc
-   ! rtpopuspay pt=96
-   ! application/x-rtp,media=audio,clock-rate=48000,payload=96,encoding-name=OPUS
+	strPipeline := `rtpsession name=r sdes="application/x-rtp-source-sdes,cname=497328127001,tool=IVR" rtp-profile=avpf
+ udpsrc name=udpsrc_rtp port=36258 caps=application/x-rtp,media=audio,clock-rate=8000,payload=96,encoding-name=TELEPHONE-EVENT timeout=30000000000
+   ! r.recv_rtp_sink
+ udpsrc name=udpsrc_rtcp port=36259 timeout=30000000000
+   ! r.recv_rtcp_sink
+ audiotestsrc name=background-tone-src
+   ! audiomixer name=amixer force-live=true
+ amixer.
+   ! mulawenc
+   ! rtppcmupay name=rtppay pt=0
+   ! application/x-rtp,media=audio,clock-rate=8000,payload=0,encoding-name=PCMU
    ! r.send_rtp_sink
  r.send_rtp_src ! identity name=rtp-in-inspector
-   ! udpsink name=udp_rtp_sink host=127.0.0.1 port=37244 async=false
+   ! udpsink name=udp_rtp_sink host=127.0.0.1 port=6000 async=false
  r.send_rtcp_src
-   ! udpsink name=udp_rtcp_sink host=127.0.0.1 port=50388 async=false
-`
+   ! udpsink name=udp_rtcp_sink host=127.0.0.1 port=6001 async=false`
+
 	if pipeline, err = gst.NewPipelineFromString(strPipeline); err != nil {
 		return err
 	}
@@ -63,6 +69,16 @@ func test() error {
 		return errors.New("can't add watch")
 	}
 	defer pipeline.GetPipelineBus().RemoveWatch()
+
+	err = pipeline.BlockSetState(gst.StatePlaying)
+	if err != nil {
+		return err
+	}
+
+	err = pipeline.BlockSetState(gst.StateReady)
+	if err != nil {
+		return err
+	}
 
 	err = pipeline.BlockSetState(gst.StatePlaying)
 	if err != nil {
